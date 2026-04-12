@@ -4,7 +4,7 @@ from collections import defaultdict
 import re
 import logging
 
-from app.core.parser import parse_product, normalize_text
+from app.core.parser import parse_product, normalize_text, extract_volume
 from app.models.schema import ProductMapping, Store
 
 logger = logging.getLogger(__name__)
@@ -158,8 +158,10 @@ def process_dataframe(df: pd.DataFrame, db_session) -> list[dict]:
                     mapped_volume = m.default_volume
                 break
 
+        variation_vol = extract_volume(variation)
+
         final_type = mapped_type or parsed['product_type']
-        final_volume = mapped_volume or parsed['volume']
+        final_volume = variation_vol or mapped_volume or parsed['volume']
 
         status = "success"
         if not final_type:

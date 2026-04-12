@@ -159,15 +159,16 @@ class SettingsView(QWidget):
         # ── Fixed save bar ──
         save_bar = QFrame()
         save_bar.setObjectName("Card")
-        save_bar.setFixedHeight(56)
+        save_bar.setMinimumHeight(65)
         sbl = QHBoxLayout(save_bar)
-        sbl.setContentsMargins(16, 8, 16, 8)
+        sbl.setContentsMargins(16, 12, 16, 12)
 
         self.lbl_saved = QLabel("")
         self.lbl_saved.setObjectName("PageSubtitle")
         sbl.addWidget(self.lbl_saved, 1)
 
         btn_save = QPushButton("💾  Salvar Configurações")
+        btn_save.setObjectName("Primary")
         btn_save.setCursor(Qt.CursorShape.PointingHandCursor)
         btn_save.clicked.connect(self._on_save)
         sbl.addWidget(btn_save)

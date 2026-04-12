@@ -180,6 +180,15 @@ def get_theme(mode: str = "dark") -> str:
     QPushButton#Destructive:hover {{
         background-color: #b91c1c;
     }}
+    QPushButton#DestructiveTable {{
+        background-color: {destructive};
+        color: #ffffff;
+        padding: 5px 10px;
+        font-size: 11px;
+    }}
+    QPushButton#DestructiveTable:hover {{
+        background-color: #b91c1c;
+    }}
     QPushButton#Ghost {{
         background-color: transparent;
         color: {accent};

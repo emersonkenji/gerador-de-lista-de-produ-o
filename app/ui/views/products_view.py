@@ -114,6 +114,7 @@ class ProductsView(QWidget):
             "ID", "Título / Padrão", "Keywords", "Tipo", "Litragem", "Var.", "Ações"
         ])
         self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        self.table.verticalHeader().setDefaultSectionSize(36)
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.table.setAlternatingRowColors(True)
         layout.addWidget(self.table, 1)
@@ -152,6 +153,7 @@ class ProductsView(QWidget):
         self.types_table.setColumnCount(3)
         self.types_table.setHorizontalHeaderLabels(["ID", "Nome do Tipo", "Ações"])
         self.types_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        self.types_table.verticalHeader().setDefaultSectionSize(36)
         self.types_table.setAlternatingRowColors(True)
         layout.addWidget(self.types_table, 1)
 
@@ -185,6 +187,7 @@ class ProductsView(QWidget):
         self.vols_table.setColumnCount(3)
         self.vols_table.setHorizontalHeaderLabels(["ID", "Litragem", "Ações"])
         self.vols_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        self.vols_table.verticalHeader().setDefaultSectionSize(36)
         self.vols_table.setAlternatingRowColors(True)
         layout.addWidget(self.vols_table, 1)
 
@@ -324,7 +327,7 @@ class ProductsView(QWidget):
             self.types_table.setItem(idx, 1, QTableWidgetItem(t.name))
 
             btn = QPushButton("🗑️  Excluir")
-            btn.setObjectName("Destructive")
+            btn.setObjectName("DestructiveTable")
             btn.setFixedWidth(90)
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
             btn.clicked.connect(partial(self._on_delete_type, t.id))
@@ -339,7 +342,7 @@ class ProductsView(QWidget):
             self.vols_table.setItem(idx, 1, QTableWidgetItem(v.name))
 
             btn = QPushButton("🗑️  Excluir")
-            btn.setObjectName("Destructive")
+            btn.setObjectName("DestructiveTable")
             btn.setFixedWidth(90)
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
             btn.clicked.connect(partial(self._on_delete_volume, v.id))
@@ -387,7 +390,7 @@ class ProductsView(QWidget):
             self.table.setItem(idx, 5, QTableWidgetItem(str(m.variation_count or 0)))
 
             btn = QPushButton("🗑️  Excluir")
-            btn.setObjectName("Destructive")
+            btn.setObjectName("DestructiveTable")
             btn.setFixedWidth(90)
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
             btn.clicked.connect(partial(self._on_delete_mapping, m.id))

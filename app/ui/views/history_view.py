@@ -1,9 +1,6 @@
-from functools import partial
-
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
-    QTableWidget, QTableWidgetItem, QHeaderView, QTextEdit,
-    QMessageBox, QFrame, QSplitter, QFileDialog, QApplication
+    QComboBox, QTextEdit, QMessageBox, QFileDialog, QApplication, QFrame
 )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QTextDocument, QFont
@@ -17,36 +14,40 @@ class HistoryView(QWidget):
         self.db = db
 
         layout = QVBoxLayout(self)
-        layout.setSpacing(12)
+        layout.setSpacing(16)
+        layout.setContentsMargins(0, 0, 0, 0)
 
+        # Header area
+        header_container = QWidget()
+        hl = QVBoxLayout(header_container)
+        hl.setSpacing(4)
+        
         title = QLabel("Histórico de Listas")
         title.setObjectName("PageTitle")
-        layout.addWidget(title)
-        sub = QLabel("Todas as listas de produção geradas — clique no 👁️ para visualizar")
+        hl.addWidget(title)
+        
+        sub = QLabel("Selecione uma lista salva para visualizar, imprimir ou exportar.")
         sub.setObjectName("PageSubtitle")
-        layout.addWidget(sub)
+        hl.addWidget(sub)
+        
+        layout.addWidget(header_container)
 
-        layout.addSpacing(4)
+        # Main Card
+        card = QFrame()
+        card.setObjectName("Card")
+        cl = QVBoxLayout(card)
+        cl.setContentsMargins(20, 16, 20, 16)
+        cl.setSpacing(14)
 
-        splitter = QSplitter(Qt.Orientation.Vertical)
+        # Top row: Select and Actions
+        top_row = QHBoxLayout()
+        top_row.setSpacing(12)
 
-        self.table = QTableWidget()
-        self.table.setColumnCount(6)
-        self.table.setHorizontalHeaderLabels([
-            "ID", "Data", "Arquivo Origem", "Baldes", "Criada em", "Ações"
-        ])
-        self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
-        self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
-        self.table.setAlternatingRowColors(True)
-        splitter.addWidget(self.table)
-
-        # Detail area
-        detail = QWidget()
-        dl = QVBoxLayout(detail)
-        dl.setContentsMargins(0, 8, 0, 0)
-
-        header = QHBoxLayout()
-        header.addWidget(QLabel("📝  Texto da Lista Selecionada"))
+        self.combo_lists = QComboBox()
+        self.combo_lists.setStyleSheet("font-size: 14px; padding: 6px;")
+        self.combo_lists.currentIndexChanged.connect(self._on_list_selected)
+        top_row.addWidget(QLabel("📂 Lista: "))
+        top_row.addWidget(self.combo_lists, 1)
 
         self.btn_copy = QPushButton("📋  Copiar")
         self.btn_copy.setObjectName("Secondary")
@@ -63,74 +64,90 @@ class HistoryView(QWidget):
         self.btn_print.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_print.clicked.connect(self._on_print)
 
-        header.addStretch()
-        header.addWidget(self.btn_copy)
-        header.addWidget(self.btn_export)
-        header.addWidget(self.btn_print)
-        dl.addLayout(header)
+        self.btn_del = QPushButton("🗑️  Excluir")
+        self.btn_del.setObjectName("Destructive")
+        self.btn_del.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_del.clicked.connect(self._on_delete)
 
+        top_row.addWidget(self.btn_copy)
+        top_row.addWidget(self.btn_export)
+        top_row.addWidget(self.btn_print)
+        top_row.addWidget(self.btn_del)
+        
+        cl.addLayout(top_row)
+
+        # Text area
         self.txt_output = QTextEdit()
         self.txt_output.setReadOnly(True)
-        dl.addWidget(self.txt_output)
-        splitter.addWidget(detail)
+        # Using larger font for preview readability
+        font = QFont("Consolas", 11)
+        self.txt_output.setFont(font)
+        cl.addWidget(self.txt_output)
 
-        splitter.setSizes([280, 320])
-        layout.addWidget(splitter, 1)
+        layout.addWidget(card, 1)
+        
+        # Internal state
+        self._current_lists = []
 
     def refresh_data(self):
-        self.table.setRowCount(0)
+        # Prevent triggering selection event while rebuilding
+        self.combo_lists.blockSignals(True)
+        self.combo_lists.clear()
         self.txt_output.clear()
 
-        lists = self.db.query(ProductionList).order_by(ProductionList.id.desc()).all()
-        for pl in lists:
-            idx = self.table.rowCount()
-            self.table.insertRow(idx)
+        self._current_lists = self.db.query(ProductionList).order_by(ProductionList.id.desc()).all()
+        
+        if not self._current_lists:
+            self.combo_lists.addItem("Nenhuma lista cadastrada")
+            self.combo_lists.setEnabled(False)
+            self._set_buttons_enabled(False)
+        else:
+            self.combo_lists.setEnabled(True)
+            self._set_buttons_enabled(True)
+            for pl in self._current_lists:
+                date_str = pl.list_date or "Data desconhecida"
+                file_str = pl.source_file_name or "Arquivo desconhecido"
+                buckets = pl.total_buckets or 0
+                label = f"{date_str} — {file_str} ({buckets} baldes) [ID: {pl.id}]"
+                self.combo_lists.addItem(label, pl.id)
+                
+            # Simulate selection of first item
+            self._load_list_content(0)
+            
+        self.combo_lists.blockSignals(False)
 
-            self.table.setItem(idx, 0, QTableWidgetItem(str(pl.id)))
-            self.table.setItem(idx, 1, QTableWidgetItem(pl.list_date or "—"))
-            self.table.setItem(idx, 2, QTableWidgetItem(pl.source_file_name or "—"))
-            self.table.setItem(idx, 3, QTableWidgetItem(str(pl.total_buckets or 0)))
+    def _set_buttons_enabled(self, enabled: bool):
+        self.btn_copy.setEnabled(enabled)
+        self.btn_export.setEnabled(enabled)
+        self.btn_print.setEnabled(enabled)
+        self.btn_del.setEnabled(enabled)
 
-            created = ""
-            if pl.created_at:
-                created = pl.created_at.strftime("%d/%m/%Y %H:%M")
-            self.table.setItem(idx, 4, QTableWidgetItem(created))
+    def _on_list_selected(self, index: int):
+        self._load_list_content(index)
 
-            # Action buttons with icons
-            actions = QWidget()
-            al = QHBoxLayout(actions)
-            al.setContentsMargins(4, 2, 4, 2)
-            al.setSpacing(4)
+    def _load_list_content(self, index: int):
+        if index < 0 or index >= len(self._current_lists):
+            self.txt_output.clear()
+            return
+        pl = self._current_lists[index]
+        self.txt_output.setText(pl.raw_text_output or "")
 
-            btn_view = QPushButton("👁️ Ver")
-            btn_view.setObjectName("Ghost")
-            btn_view.setFixedWidth(60)
-            btn_view.setCursor(Qt.CursorShape.PointingHandCursor)
-            btn_view.clicked.connect(partial(self._on_view, pl.raw_text_output))
-
-            btn_del = QPushButton("🗑️ Excluir")
-            btn_del.setObjectName("Destructive")
-            btn_del.setFixedWidth(80)
-            btn_del.setCursor(Qt.CursorShape.PointingHandCursor)
-            btn_del.clicked.connect(partial(self._on_delete, pl.id))
-
-            al.addWidget(btn_view)
-            al.addWidget(btn_del)
-            self.table.setCellWidget(idx, 5, actions)
-
-    def _on_view(self, text, *args):
-        self.txt_output.setText(text or "")
-
-    def _on_delete(self, list_id, *args):
+    def _on_delete(self, *args):
+        idx = self.combo_lists.currentIndex()
+        if idx < 0 or idx >= len(self._current_lists):
+            return
+            
+        pl = self._current_lists[idx]
+        
         reply = QMessageBox.question(
             self, "Confirmar Exclusão",
-            "Excluir esta lista e todos os seus itens?",
+            f"Deseja excluir a lista do dia {pl.list_date} permanentemente?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
         )
         if reply == QMessageBox.StandardButton.Yes:
-            pl = self.db.query(ProductionList).filter(ProductionList.id == list_id).first()
-            if pl:
-                self.db.delete(pl)
+            db_item = self.db.query(ProductionList).filter(ProductionList.id == pl.id).first()
+            if db_item:
+                self.db.delete(db_item)
                 self.db.commit()
                 self.refresh_data()
 
@@ -138,35 +155,37 @@ class HistoryView(QWidget):
         text = self.txt_output.toPlainText()
         if text:
             QApplication.clipboard().setText(text)
-            QMessageBox.information(self, "Copiado", "Texto copiado!")
-        else:
-            QMessageBox.warning(self, "Aviso", "Selecione uma lista primeiro (botão 👁️ Ver).")
+            QMessageBox.information(self, "Copiado", "Texto copiado para a área de transferência!")
 
     def _on_export(self, *args):
         text = self.txt_output.toPlainText()
         if not text:
-            QMessageBox.warning(self, "Aviso", "Selecione uma lista primeiro (botão 👁️ Ver).")
             return
-        path, _ = QFileDialog.getSaveFileName(self, "Salvar como .txt", "lista_producao.txt", "Text (*.txt)")
+            
+        pl = self._current_lists[self.combo_lists.currentIndex()]
+        default_name = f"lista_producao_{pl.list_date.replace('/', '-')}.txt" if pl.list_date else "lista_producao.txt"
+        
+        path, _ = QFileDialog.getSaveFileName(self, "Salvar como .txt", default_name, "Text (*.txt)")
         if path:
             with open(path, "w", encoding="utf-8") as f:
                 f.write(text)
-            QMessageBox.information(self, "Exportado", f"Salvo em:\n{path}")
+            QMessageBox.information(self, "Exportado", f"Arquivo salvo com sucesso em:\n{path}")
 
     def _on_print(self, *args):
         text = self.txt_output.toPlainText()
         if not text:
-            QMessageBox.warning(self, "Aviso", "Selecione uma lista primeiro (botão 👁️ Ver).")
             return
+            
         try:
             from PySide6.QtPrintSupport import QPrinter, QPrintDialog
-            printer = QPrinter(QPrinter.Mode.HighResolution)
+            printer = QPrinter(QPrinter.HighResolution)
             dialog = QPrintDialog(printer, self)
-            dialog.setWindowTitle("Imprimir Lista")
+            dialog.setWindowTitle("Imprimir Lista de Produção")
+            
             if dialog.exec() == QPrintDialog.Accepted:
                 doc = QTextDocument()
                 doc.setPlainText(text)
                 doc.setDefaultFont(QFont("Consolas", 11))
                 doc.print_(printer)
         except Exception as e:
-            QMessageBox.critical(self, "Erro", f"Erro ao imprimir:\n{str(e)}")
+            QMessageBox.critical(self, "Erro", f"Erro ao acessar impressora:\n{str(e)}")

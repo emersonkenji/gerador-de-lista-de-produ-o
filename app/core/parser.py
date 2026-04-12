@@ -55,10 +55,10 @@ def extract_color(variation_text: str, volume_str: str | None = None) -> str:
     text = variation_text
 
     # Remove volume patterns
-    text = re.sub(r',?\s*3[.,]\s*6\s*(L|l|litros?)\s*', '', text)
-    text = re.sub(r',?\s*10\s*(L|l|litros?)\s*', '', text)
-    text = re.sub(r',?\s*18\s*(L|l|litros?)\s*', '', text)
-    text = re.sub(r',?\s*500\s*(ml|ML)\s*', '', text)
+    text = re.sub(r',?\s*3[.,]\s*6\s*(l|litros?)\s*', '', text, flags=re.IGNORECASE)
+    text = re.sub(r',?\s*10\s*(l|litros?)\s*', '', text, flags=re.IGNORECASE)
+    text = re.sub(r',?\s*18\s*(l|litros?)\s*', '', text, flags=re.IGNORECASE)
+    text = re.sub(r',?\s*500\s*(ml)\s*', '', text, flags=re.IGNORECASE)
 
     # Clean leftover commas and spaces
     text = text.strip().strip(',').strip()

@@ -153,32 +153,40 @@ class ImportView(QWidget):
 
         if result == ClassifyDialog.Accepted:
             classifications = dialog.get_classifications()
-            for idx, chosen_type in classifications.items():
-                self.parsed_records[idx]["product_type"] = chosen_type
+            for idx, chosen in classifications.items():
+                self.parsed_records[idx]["product_type"] = chosen["type"]
+                self.parsed_records[idx]["volume"] = chosen["volume"]
                 self.parsed_records[idx]["classification_status"] = "success"
 
             title_types = dialog.get_title_classifications()
-            for title, chosen_type in title_types.items():
-                self._save_mapping(title, chosen_type)
+            for title, chosen in title_types.items():
+                self._save_mapping(title, chosen["type"], chosen["volume"])
         else:
             for item in pending_items:
                 idx = item["_index"]
                 self.parsed_records[idx]["product_type"] = "Econômica"
+                if self.parsed_records[idx]["volume"] == "Indefinida":
+                    self.parsed_records[idx]["volume"] = "18L"
                 self.parsed_records[idx]["classification_status"] = "success"
 
-    def _save_mapping(self, title, product_type):
+    def _save_mapping(self, title, product_type, volume=None):
         norm = normalize_text(title)
+        if volume == "Automático":
+            volume = extract_volume(title)
+
         mappings = self.db.query(ProductMapping).filter(ProductMapping.is_active == True).all()
         for m in mappings:
             pat = normalize_text(m.title_pattern)
             if pat and (pat in norm or norm in pat):
                 m.product_type = product_type
+                if volume:
+                    m.default_volume = volume
                 self.db.commit()
                 return
         new = ProductMapping(
             title_pattern=title,
             product_type=product_type,
-            default_volume=extract_volume(title),
+            default_volume=volume,
             is_active=True,
             auto_registered=True
         )
@@ -258,7 +266,7 @@ class ImportView(QWidget):
 
         try:
             from PySide6.QtPrintSupport import QPrinter, QPrintDialog
-            printer = QPrinter(QPrinter.Mode.HighResolution)
+            printer = QPrinter(QPrinter.HighResolution)
             dialog = QPrintDialog(printer, self)
             dialog.setWindowTitle("Imprimir Lista de Produção")
 
