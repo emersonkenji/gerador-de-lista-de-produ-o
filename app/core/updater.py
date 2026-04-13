@@ -4,10 +4,12 @@ Suporta repositórios PRIVADOS usando Personal Access Token (PAT).
 Verifica a tag mais recente e baixa/aplica a atualização.
 """
 import os
+import sys
 import json
 import shutil
 import zipfile
 import tempfile
+import subprocess
 import logging
 import urllib.request
 from packaging import version as pkg_version
@@ -68,15 +70,81 @@ def check_for_update(repo: str, current_version: str, token: str = "") -> dict |
     return None
 
 
-def download_and_extract_update(zipball_url: str, target_dir: str, token: str = "") -> bool:
-    """Baixa o zipball e extrai no diretório do projeto."""
+def apply_update(release: dict, target_dir: str = ".", token: str = "") -> bool:
+    """Aplica a atualização dependendo se o app está empacotado (.exe) ou em fonte (.py)."""
+    is_frozen = getattr(sys, 'frozen', False)
+    
+    if is_frozen:
+        logger.info("Modo Executável Detectado. Atualizando binário...")
+        return _update_executable(release, token)
+    else:
+        logger.info("Modo Fonte Detectado. Atualizando arquivos python...")
+        zip_url = release.get("zipball_url")
+        if not zip_url:
+            return False
+        return _update_source(zip_url, target_dir, token)
+
+
+def _update_executable(release: dict, token: str = "") -> bool:
+    """Faz o hot-swap do .exe atual pelo novo."""
+    try:
+        # Puxa a url do primeiro anexo (asset) que será nosso .exe novo
+        assets = release.get("assets", [])
+        if not assets:
+            logger.error("Nenhum arquivo executável (.exe) anexado nesta Release!")
+            return False
+            
+        exe_url = assets[0].get("browser_download_url")
+        if not exe_url:
+            return False
+            
+        current_exe = sys.executable
+        exe_dir = os.path.dirname(current_exe)
+        exe_name = os.path.basename(current_exe)
+        
+        tmp_exe = os.path.join(exe_dir, "update_new.exe")
+        bat_path = os.path.join(exe_dir, "apply_update.bat")
+        
+        logger.info(f"Baixando novo executável de {exe_url} para {tmp_exe}")
+        
+        headers = {}
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+            
+        # Baixa o .exe novo suportando redirects do github
+        headers['Accept'] = "application/octet-stream"
+        req = urllib.request.Request(exe_url, headers=headers)
+        with urllib.request.urlopen(req, timeout=120) as resp:
+            with open(tmp_exe, 'wb') as f:
+                f.write(resp.read())
+                
+        # Cria um script .bat que apaga o atual, renomeia o novo, abre, e se apaga.
+        bat_content = f"""@echo off
+echo Atualizando Gerador de Lista de Producao...
+timeout /t 3 /nobreak > nul
+del /f /q "{exe_name}"
+ren "update_new.exe" "{exe_name}"
+start "" "{exe_name}"
+del "%~f0"
+"""
+        with open(bat_path, "w") as f:
+            f.write(bat_content)
+        
+        # Lança o script como processo fantasma
+        subprocess.Popen([bat_path], shell=True)
+        return True
+        
+    except Exception as e:
+        logger.error(f"Falha ao realizar hot-swap do EXE: {e}")
+        return False
+
+
+def _update_source(zipball_url: str, target_dir: str, token: str = "") -> bool:
+    """Baixa o zipball e extrai os códigos fonte (modo desenvolvedor)."""
     try:
         tmp_dir = tempfile.mkdtemp()
         zip_path = os.path.join(tmp_dir, "update.zip")
 
-        logger.info(f"Baixando atualização de {zipball_url}")
-
-        # Precisa do token para repos privados
         headers = {}
         if token:
             headers["Authorization"] = f"Bearer {token}"
@@ -106,9 +174,9 @@ def download_and_extract_update(zipball_url: str, target_dir: str, token: str = 
                         dst.write(src.read())
 
         shutil.rmtree(tmp_dir, ignore_errors=True)
-        logger.info("Atualização aplicada com sucesso!")
+        logger.info("Atualização do código-fonte aplicada com sucesso!")
         return True
 
     except Exception as e:
-        logger.error(f"Falha ao aplicar atualização: {e}")
+        logger.error(f"Falha ao aplicar atualização de código-fonte: {e}")
         return False

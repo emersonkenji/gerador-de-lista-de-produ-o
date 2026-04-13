@@ -2,9 +2,9 @@ from functools import partial
 
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QPushButton, QStackedWidget, QLabel, QFrame
+    QPushButton, QStackedWidget, QLabel, QFrame, QMessageBox, QApplication
 )
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer, QThread, Signal
 
 from app.themes.qss_manager import APP_VERSION
 from app.ui.views.dashboard_view import DashboardView
@@ -12,6 +12,21 @@ from app.ui.views.import_view import ImportView
 from app.ui.views.products_view import ProductsView
 from app.ui.views.history_view import HistoryView
 from app.ui.views.settings_view import SettingsView
+from app.core.updater import check_for_update, apply_update
+
+
+class UpdateThread(QThread):
+    update_available = Signal(dict)
+
+    def __init__(self, current_version):
+        super().__init__()
+        self.current_version = current_version
+
+    def run(self):
+        repo = "emersonkenji/gerador-de-lista-de-produ-o"
+        release = check_for_update(repo, self.current_version, "")
+        if release:
+            self.update_available.emit(release)
 
 
 class MainWindow(QMainWindow):
@@ -95,6 +110,42 @@ class MainWindow(QMainWindow):
 
         # Initial view
         self.switch_to(0)
+
+        # Configurar verificação em background (duas vezes por dia = a cada 12 horas)
+        self.bg_update_timer = QTimer(self)
+        self.bg_update_timer.timeout.connect(self._check_bg_updates)
+        self.bg_update_timer.start(43200000)  # 12 * 60 * 60 * 1000 ms = 12 horas
+
+        # Fazer a primeira verificação agressiva logo após abrir (após 10 segundos)
+        QTimer.singleShot(10000, self._check_bg_updates)
+
+    def _check_bg_updates(self):
+        self.update_thread = UpdateThread(APP_VERSION)
+        self.update_thread.update_available.connect(self._prompt_bg_update)
+        self.update_thread.start()
+
+    def _prompt_bg_update(self, release):
+        notes = release.get('body', '') or ''
+        if len(notes) > 150:
+            notes = notes[:150] + "…"
+
+        reply = QMessageBox.question(
+            self, "🎉 Nova Atualização Disponível!",
+            f"O sistema encontrou uma versão mais recente (v{release['tag']}) enquanto rodava.\n\n"
+            f"Detalhes: {release.get('name', '')}\n\n"
+            f"Deseja baixar e aplicar a atualização agora?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        if reply == QMessageBox.StandardButton.Yes:
+            success = apply_update(release, ".", "")
+            if success:
+                QMessageBox.information(
+                    self, "Sucesso",
+                    "Atualização baixada e aplicada! O aplicativo será fechado para as mudanças entrarem em vigor."
+                )
+                QApplication.quit()
+            else:
+                QMessageBox.warning(self, "Erro", "Falha ao baixar/aplicar a atualização silenciosa.")
 
     def _on_nav_clicked(self, index, *args):
         """Slot for sidebar navigation buttons."""

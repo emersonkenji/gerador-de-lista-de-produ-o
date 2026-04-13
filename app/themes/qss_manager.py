@@ -1,7 +1,8 @@
 """QSS Theme Manager — Estilo profissional inspirado em Shadcn/UI."""
+from app.version import VERSION
 
 # Versão atual do app (usada na sidebar e updater)
-APP_VERSION = "1.0.0"
+APP_VERSION = VERSION
 
 
 def get_theme(mode: str = "dark") -> str:

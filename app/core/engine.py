@@ -1,4 +1,5 @@
 import pandas as pd
+import openpyxl  # Forçando inclusão pelo PyInstaller
 from datetime import datetime
 from collections import defaultdict
 import re

@@ -2,6 +2,7 @@ from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, Text, 
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from app.database.connection import Base
+from app.version import VERSION
 
 
 class Store(Base):
@@ -103,6 +104,6 @@ class AppSettings(Base):
     enable_sync = Column(Boolean, default=False)
     github_repo = Column(String, default="")
     github_token = Column(String, default="")
-    current_version = Column(String, default="1.0.0")
+    current_version = Column(String, default=VERSION)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

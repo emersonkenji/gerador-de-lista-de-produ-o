@@ -5,3 +5,5 @@ SQLAlchemy>=2.0.25
 pydantic>=2.6.1
 supabase>=2.3.0
 python-dotenv>=1.0.1
+packaging>=23.0
+pyinstaller>=6.5.0

@@ -6,7 +6,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt
 
 from app.models.schema import AppSettings
-from app.core.updater import check_for_update, download_and_extract_update
+from app.core.updater import check_for_update, apply_update
 from app.database.connection import get_data_dir
 from app.themes.qss_manager import APP_VERSION
 
@@ -72,11 +72,8 @@ class SettingsView(QWidget):
         gh_layout.setSpacing(14)
 
         note = QLabel(
-            "Configure seu repositório GitHub (privado ou público) para receber "
-            "atualizações automáticas via Releases.\n\n"
-            "Para repos privados, gere um Personal Access Token em:\n"
-            "GitHub → Settings → Developer settings → Personal access tokens → Fine-grained tokens\n"
-            "Dê permissão de 'Contents: Read-only' ao repositório."
+            f"O sistema busca automaticamente por atualizações disponibilizadas em:\n"
+            f"https://github.com/emersonkenji/gerador-de-lista-de-produ-o"
         )
         note.setObjectName("PageSubtitle")
         note.setWordWrap(True)
@@ -87,14 +84,9 @@ class SettingsView(QWidget):
         form2.setSpacing(10)
         form2.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
 
-        self.inp_repo = QLineEdit()
-        self.inp_repo.setPlaceholderText("usuario/nome-do-repositorio")
-        form2.addRow("Repositório:", self.inp_repo)
+        # GitHub configuration uses a fixed repository
 
-        self.inp_token = QLineEdit()
-        self.inp_token.setPlaceholderText("ghp_xxxx (deixe vazio para repos públicos)")
-        self.inp_token.setEchoMode(QLineEdit.EchoMode.Password)
-        form2.addRow("Token (PAT):", self.inp_token)
+        # Token no longer needed since repo is public
 
         self.inp_version = QLineEdit()
         self.inp_version.setReadOnly(True)
@@ -103,10 +95,7 @@ class SettingsView(QWidget):
 
         gh_layout.addLayout(form2)
 
-        # Show/hide token toggle
-        self.chk_show_token = QCheckBox("Mostrar token")
-        self.chk_show_token.clicked.connect(self._toggle_token_visibility)
-        gh_layout.addWidget(self.chk_show_token)
+        # Hidden token toggle since token input is removed
 
         # Update buttons
         update_row = QHBoxLayout()
@@ -180,11 +169,7 @@ class SettingsView(QWidget):
         lbl.setStyleSheet("font-size: 15px; font-weight: 700; padding: 4px 0;")
         return lbl
 
-    def _toggle_token_visibility(self, *args):
-        if self.chk_show_token.isChecked():
-            self.inp_token.setEchoMode(QLineEdit.EchoMode.Normal)
-        else:
-            self.inp_token.setEchoMode(QLineEdit.EchoMode.Password)
+    # toggle visibility removed
 
     def refresh_data(self):
         s = self.db.query(AppSettings).first()
@@ -196,8 +181,8 @@ class SettingsView(QWidget):
             self.inp_supa_url.setText(s.supabase_url or "")
             self.inp_supa_key.setText(s.supabase_key or "")
             self.chk_sync.setChecked(s.enable_sync or False)
-            self.inp_repo.setText(s.github_repo or "")
-            self.inp_token.setText(s.github_token or "")
+        # self.inp_repo is no longer used, repo is fixed
+        # token is no longer mapped
             self.inp_version.setText(s.current_version or APP_VERSION)
 
     def _on_save(self, *args):
@@ -211,20 +196,16 @@ class SettingsView(QWidget):
         s.supabase_url = self.inp_supa_url.text().strip()
         s.supabase_key = self.inp_supa_key.text().strip()
         s.enable_sync = self.chk_sync.isChecked()
-        s.github_repo = self.inp_repo.text().strip()
-        s.github_token = self.inp_token.text().strip()
+        # Github repo is fixed, no need to save in DB if it won't be edited
+        # token is no longer saved
 
         self.db.commit()
         self.lbl_saved.setText("✅  Configurações salvas!")
 
     def _on_check_update(self, *args):
-        repo = self.inp_repo.text().strip()
-        token = self.inp_token.text().strip()
+        repo = "emersonkenji/gerador-de-lista-de-produ-o"
+        token = ""
         version = self.inp_version.text().strip() or APP_VERSION
-
-        if not repo:
-            QMessageBox.warning(self, "Aviso", "Informe o repositório GitHub primeiro.")
-            return
 
         self.lbl_status.setText("Verificando...")
         self.btn_check.setEnabled(False)
@@ -252,7 +233,7 @@ class SettingsView(QWidget):
                     QApplication.processEvents()
 
                     target = get_data_dir()
-                    ok = download_and_extract_update(release["zipball_url"], target, token)
+                    ok = apply_update(release, target, token)
                     if ok:
                         s = self.db.query(AppSettings).first()
                         if s:

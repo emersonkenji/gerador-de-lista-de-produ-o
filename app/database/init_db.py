@@ -4,6 +4,7 @@ from app.models.schema import (
     AppSettings, ProductMapping, ProductionList, ProductionListItem,
     Store, TypeVariation, VolumeVariation
 )
+from app.version import VERSION
 
 
 DEFAULT_TYPES = ["Econômica", "Piso", "Externa", "Emborrachada", "Premium"]
@@ -19,7 +20,7 @@ def _migrate_db():
     migrations = [
         ("app_settings", "github_token", "TEXT", "''"),
         ("app_settings", "github_repo", "TEXT", "''"),
-        ("app_settings", "current_version", "TEXT", "'1.0.0'"),
+        ("app_settings", "current_version", "TEXT", f"'{VERSION}'"),
         ("products_mapping", "auto_registered", "INTEGER", "0"),
         ("products_mapping", "variation_count", "INTEGER", "0"),
         ("production_list_items", "store_name", "TEXT", "''"),
@@ -48,9 +49,9 @@ def init_db():
         settings = db.query(AppSettings).first()
         if not settings:
             settings = AppSettings(
-                company_name="E.F.S.T COMERCIAL LTDA",
+                company_name="Colorvil",
                 theme="dark",
-                current_version="1.0.0"
+                current_version=VERSION
             )
             db.add(settings)
             db.commit()
