@@ -26,7 +26,7 @@ def _make_request(url: str, token: str = "") -> dict | None:
         headers["Authorization"] = f"Bearer {token}"
     try:
         req = urllib.request.Request(url, headers=headers)
-        with urllib.request.urlopen(req, timeout=15) as resp:
+        with urllib.request.urlopen(req, timeout=30) as resp:
             return json.loads(resp.read().decode())
     except Exception as e:
         logger.warning(f"Falha na requisição GitHub: {e}")

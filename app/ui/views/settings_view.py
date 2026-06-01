@@ -3,12 +3,38 @@ from PySide6.QtWidgets import (
     QLineEdit, QCheckBox, QMessageBox, QFrame, QFormLayout,
     QComboBox, QScrollArea
 )
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QThread, pyqtSignal
+import logging
 
 from app.models.schema import AppSettings
 from app.core.updater import check_for_update, apply_update
 from app.database.connection import get_data_dir
 from app.themes.qss_manager import APP_VERSION
+
+logger = logging.getLogger(__name__)
+
+
+class UpdateCheckerThread(QThread):
+    """Thread para verificar atualizações sem bloquear a UI."""
+    update_found = pyqtSignal(dict)
+    update_error = pyqtSignal(str)
+    
+    def __init__(self, repo: str, version: str, token: str = ""):
+        super().__init__()
+        self.repo = repo
+        self.version = version
+        self.token = token
+    
+    def run(self):
+        try:
+            release = check_for_update(self.repo, self.version, self.token)
+            if release:
+                self.update_found.emit(release)
+            else:
+                self.update_error.emit("Você já tem a versão mais recente!")
+        except Exception as e:
+            logger.error(f"Erro ao verificar atualizações: {e}")
+            self.update_error.emit(f"Erro: {str(e)}")
 
 
 class SettingsView(QWidget):
@@ -16,6 +42,7 @@ class SettingsView(QWidget):
         super().__init__(parent)
         self.db = db
         self.main_window = parent
+        self.update_thread = None
 
         outer = QVBoxLayout(self)
         outer.setSpacing(0)
@@ -203,6 +230,7 @@ class SettingsView(QWidget):
         self.lbl_saved.setText("✅  Configurações salvas!")
 
     def _on_check_update(self, *args):
+        """Verifica atualizações em uma thread separada para não bloquear a UI."""
         repo = "emersonkenji/gerador-de-lista-de-produ-o"
         token = ""
         version = self.inp_version.text().strip() or APP_VERSION
@@ -210,50 +238,59 @@ class SettingsView(QWidget):
         self.lbl_status.setText("Verificando...")
         self.btn_check.setEnabled(False)
 
-        try:
-            from PySide6.QtWidgets import QApplication
-            QApplication.processEvents()
+        # Criar thread para verificação
+        self.update_thread = UpdateCheckerThread(repo, version, token)
+        self.update_thread.update_found.connect(self._on_update_found)
+        self.update_thread.update_error.connect(self._on_update_error)
+        self.update_thread.start()
 
-            release = check_for_update(repo, version, token)
-            if release:
-                notes = release.get('body', '') or ''
-                if len(notes) > 200:
-                    notes = notes[:200] + "…"
+    def _on_update_found(self, release: dict):
+        """Callback quando atualização é encontrada."""
+        self.btn_check.setEnabled(True)
+        
+        notes = release.get('body', '') or ''
+        if len(notes) > 200:
+            notes = notes[:200] + "…"
 
-                reply = QMessageBox.question(
-                    self, "🎉 Atualização Disponível",
-                    f"Nova versão: v{release['tag']}\n\n"
-                    f"{release.get('name', '')}\n"
-                    f"{notes}\n\n"
-                    f"Deseja baixar e aplicar agora?",
-                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        reply = QMessageBox.question(
+            self, "🎉 Atualização Disponível",
+            f"Nova versão: v{release['tag']}\n\n"
+            f"{release.get('name', '')}\n"
+            f"{notes}\n\n"
+            f"Deseja baixar e aplicar agora?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        
+        if reply == QMessageBox.StandardButton.Yes:
+            self.lbl_status.setText("Baixando...")
+            self.btn_check.setEnabled(False)
+            
+            target = get_data_dir()
+            ok = apply_update(release, target, "")
+            
+            if ok:
+                s = self.db.query(AppSettings).first()
+                if s:
+                    s.current_version = release["tag"]
+                    self.db.commit()
+                    self.inp_version.setText(release["tag"])
+
+                QMessageBox.information(
+                    self, "Atualizado",
+                    f"v{release['tag']} aplicada!\nReinicie o app."
                 )
-                if reply == QMessageBox.StandardButton.Yes:
-                    self.lbl_status.setText("Baixando...")
-                    QApplication.processEvents()
-
-                    target = get_data_dir()
-                    ok = apply_update(release, target, token)
-                    if ok:
-                        s = self.db.query(AppSettings).first()
-                        if s:
-                            s.current_version = release["tag"]
-                            self.db.commit()
-                            self.inp_version.setText(release["tag"])
-
-                        QMessageBox.information(
-                            self, "Atualizado",
-                            f"v{release['tag']} aplicada!\nReinicie o app."
-                        )
-                        self.lbl_status.setText(f"✅ v{release['tag']} instalada")
-                    else:
-                        self.lbl_status.setText("❌ Falha")
-                        QMessageBox.critical(self, "Erro", "Falha ao baixar a atualização.")
-                else:
-                    self.lbl_status.setText(f"v{release['tag']} disponível")
+                self.lbl_status.setText(f"✅ v{release['tag']} instalada")
             else:
-                self.lbl_status.setText("✅ Versão mais recente!")
-        except Exception as e:
-            self.lbl_status.setText(f"❌ {str(e)[:50]}")
-        finally:
+                self.lbl_status.setText("❌ Falha")
+                QMessageBox.critical(self, "Erro", "Falha ao baixar a atualização.")
+            
             self.btn_check.setEnabled(True)
+        else:
+            self.lbl_status.setText(f"✅ v{release['tag']} disponível")
+            self.btn_check.setEnabled(True)
+
+    def _on_update_error(self, error_msg: str):
+        """Callback quando há erro na verificação."""
+        self.btn_check.setEnabled(True)
+        self.lbl_status.setText("❌ Erro")
+        QMessageBox.information(self, "Verificação de Atualização", error_msg)
