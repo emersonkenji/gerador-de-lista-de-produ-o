@@ -16,16 +16,44 @@ def extract_volume(text: str) -> str | None:
     """Extrai a litragem de um texto (variação ou título)."""
     text_norm = normalize_text(text)
 
-    if re.search(r'3[.,]\s*6\s*(l|litros?)\b', text_norm):
+    # Prioriza volumes mencionados com vírgula (como em variação "Cor,10L")
+    if re.search(r',\s*3[.,]\s*6\s*(l|litros?)\b', text_norm):
         return "3,6L"
-    if re.search(r'\b10\s*(l|litros?)\b', text_norm):
+    if re.search(r',\s*10\s*(l|litros?)\b', text_norm):
         return "10L"
-    if re.search(r'\b18\s*(l|litros?)\b', text_norm):
+    if re.search(r',\s*18\s*(l|litros?)\b', text_norm):
         return "18L"
+    if re.search(r',\s*500\s*ml\b', text_norm):
+        return "500ml"
+
+    # Depois procura padrões em "literosN" ou "NL" (compactos como "18l" ou "18 litros")
+    if re.search(r'\b18\s*(?:l|litro)s?\b', text_norm):
+        return "18L"
+    if re.search(r'\b10\s*(?:l|litro)s?\b', text_norm):
+        return "10L"
+    if re.search(r'\b3[.,]\s*6\s*(?:l|litro)s?\b', text_norm):
+        return "3,6L"
     if re.search(r'\b500\s*ml\b', text_norm):
         return "500ml"
 
     return None
+
+
+def count_volumes_in_text(text: str) -> int:
+    """Conta quantos tamanhos diferentes aparecem em um texto."""
+    text_norm = normalize_text(text)
+    count = 0
+    
+    if re.search(r'\b18\s*(?:l|litro)s?\b', text_norm):
+        count += 1
+    if re.search(r'\b10\s*(?:l|litro)s?\b', text_norm):
+        count += 1
+    if re.search(r'\b3[.,]\s*6\s*(?:l|litro)s?\b', text_norm):
+        count += 1
+    if re.search(r'\b500\s*ml\b', text_norm):
+        count += 1
+    
+    return count
 
 
 def determine_type_from_text(text: str) -> str | None:

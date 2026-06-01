@@ -5,7 +5,7 @@ from collections import defaultdict
 import re
 import logging
 
-from app.core.parser import parse_product, normalize_text, extract_volume
+from app.core.parser import parse_product, normalize_text, extract_volume, count_volumes_in_text
 from app.models.schema import ProductMapping, Store
 
 logger = logging.getLogger(__name__)
@@ -160,17 +160,29 @@ def process_dataframe(df: pd.DataFrame, db_session) -> list[dict]:
                 break
 
         variation_vol = extract_volume(variation)
+        
+        # Inicializa status como sucesso
+        status = "success"
+        
+        # Se o título tem múltiplos tamanhos e a variação não especifica o tamanho
+        # marcar como pending para classificação manual
+        title_volume_count = count_volumes_in_text(title)
+        if title_volume_count > 1 and not variation_vol and variation and variation.lower() != "nan":
+            # Título tem múltiplos tamanhos mas variação não especifica o tamanho
+            # (ex: título "18L 10L 3,6L" e variação "Azul Sereno" sem tamanho)
+            status = "pending"
+            final_volume = "Indefinida"
+        else:
+            final_volume = variation_vol or mapped_volume or parsed['volume']
 
         final_type = mapped_type or parsed['product_type']
-        final_volume = variation_vol or mapped_volume or parsed['volume']
 
-        status = "success"
         if not final_type:
             status = "pending"
             final_type = "Outros"  # Será resolvido pelo popup de classificação
-        if not final_volume:
-            status = "pending"
-            final_volume = "Indefinida"
+        if not final_volume or final_volume == "Indefinida":
+            if status != "pending":  # Já está marcado como pending pela lógica acima
+                status = "pending"
 
         records.append({
             "product_type": final_type,
